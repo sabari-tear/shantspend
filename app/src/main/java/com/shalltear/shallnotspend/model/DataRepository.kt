@@ -112,22 +112,86 @@ object DataRepository {
         prefs.edit().putString(KEY_ARCHIVES, gson.toJson(monthArchives.toList())).apply()
     }
 
-    fun archiveMonthForAccount(accountId: String, closingBalance: Double) {
+    fun getTransactionsForAccount(accountId: String): List<Transaction> {
+        return transactions.filter { it.accountId == accountId }
+    }
+
+    fun getMonthlyRefreshAmountForAccount(accountId: String): Double {
+        val account = accounts.find { it.id == accountId } ?: return 0.0
+        if (account.monthlyRefreshAmount > 0.0) {
+            return account.monthlyRefreshAmount
+        }
+
+        val accountTransactions = transactions
+            .filter { it.accountId == accountId }
+            .sortedByDescending { it.date }
+
+        val currentAmount = accountTransactions.firstOrNull {
+            it.type == TransactionType.INCOME &&
+                it.amount > 0.0 &&
+                (
+                    it.title == "Monthly Credit" ||
+                        it.title == "Existing Amount" ||
+                        it.title == "Monthly Refresh" ||
+                        it.category == "Initial" ||
+                        it.category == "Monthly Credit" ||
+                        it.category == "Monthly Refresh"
+                    )
+        }?.amount
+
+        val archivedAmount = monthArchives
+            .filter { it.accountId == accountId }
+            .sortedByDescending { it.archivedAt }
+            .asSequence()
+            .flatMap { archive -> archive.transactions.asSequence().sortedByDescending { it.date } }
+            .firstOrNull {
+                it.type == TransactionType.INCOME &&
+                    it.amount > 0.0 &&
+                    (
+                        it.title == "Monthly Credit" ||
+                            it.title == "Existing Amount" ||
+                            it.title == "Monthly Refresh" ||
+                            it.category == "Initial" ||
+                            it.category == "Monthly Credit" ||
+                            it.category == "Monthly Refresh"
+                        )
+            }?.amount
+
+        val resolvedAmount = currentAmount ?: archivedAmount ?: 0.0
+        if (resolvedAmount > 0.0) {
+            updateAccount(account.copy(monthlyRefreshAmount = resolvedAmount))
+        }
+        return resolvedAmount
+    }
+
+    fun archiveMonthForAccount(
+        accountId: String,
+        closingBalance: Double,
+        appendedTransactions: List<Transaction> = emptyList(),
+        endedAt: LocalDateTime = LocalDateTime.now()
+    ) {
         val account = accounts.find { it.id == accountId } ?: return
         val txsToArchive = transactions.filter { it.accountId == accountId }
-        if (txsToArchive.isEmpty()) return
+        val archiveTransactions = (txsToArchive + appendedTransactions).sortedBy { it.date }
+        if (archiveTransactions.isEmpty()) return
 
-        val now = LocalDateTime.now()
-        val label = now.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault()))
+        val periodStart = archiveTransactions.minByOrNull { it.date }?.date ?: endedAt
+        val label = buildString {
+            append(periodStart.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())))
+            append(" - ")
+            append(endedAt.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.getDefault())))
+        }
 
         monthArchives.add(
             MonthArchive(
                 accountId = accountId,
                 accountName = account.name,
                 label = label,
-                archivedAt = now,
-                transactions = txsToArchive.toList(),
-                closingBalance = closingBalance
+                archivedAt = endedAt,
+                transactions = archiveTransactions,
+                closingBalance = closingBalance,
+                periodStart = periodStart,
+                periodEnd = endedAt
             )
         )
         transactions.removeAll { it.accountId == accountId }
@@ -168,6 +232,11 @@ object DataRepository {
             transactions[index] = transaction
             saveTransactions()
         }
+    }
+
+    fun deleteTransaction(transactionId: String) {
+        transactions.removeAll { it.id == transactionId }
+        saveTransactions()
     }
 
     fun getBalanceForAccount(accountId: String): Double {

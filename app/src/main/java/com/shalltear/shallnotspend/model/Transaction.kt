@@ -11,7 +11,8 @@ data class Account(
     val id: String,
     val name: String,
     val type: AccountType,
-    val initialBalance: Double = 0.0
+    val initialBalance: Double = 0.0,
+    val monthlyRefreshAmount: Double = 0.0
 )
 
 enum class TransactionType {
@@ -38,5 +39,7 @@ data class MonthArchive(
     val label: String,
     val archivedAt: LocalDateTime,
     val transactions: List<Transaction>,
-    val closingBalance: Double
+    val closingBalance: Double,
+    val periodStart: LocalDateTime? = null,
+    val periodEnd: LocalDateTime? = null
 )

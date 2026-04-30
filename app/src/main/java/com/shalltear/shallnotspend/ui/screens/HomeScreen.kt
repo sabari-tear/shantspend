@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.Account
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.TransactionType
+import com.shalltear.shallnotspend.ui.util.formatCurrency
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -55,7 +56,7 @@ fun DashboardScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "$${String.format("%.2f", totalWealth)}",
+                    text = formatCurrency(totalWealth),
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold
@@ -161,7 +162,7 @@ fun AccountCard(account: Account, balance: Double, onClick: () -> Unit, onLongCl
             }
             
             Text(
-                text = "$${String.format("%.2f", balance)}",
+                text = formatCurrency(balance),
                 color = MaterialTheme.colorScheme.onBackground,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold

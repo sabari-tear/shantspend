@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.TransactionType
+import com.shalltear.shallnotspend.ui.util.formatCurrency
+import com.shalltear.shallnotspend.ui.util.formatSignedCurrency
 
 @Composable
 fun LendBorrowScreen(modifier: Modifier = Modifier) {
@@ -98,7 +100,7 @@ fun DebtDashboard(modifier: Modifier = Modifier, onPersonClick: (String) -> Unit
                 val color = if (netBalance >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
                 val prefix = if (netBalance >= 0) "+" else "-"
                 Text(
-                    text = "$prefix$${String.format("%.2f", Math.abs(netBalance))}",
+                    text = formatSignedCurrency(Math.abs(netBalance), prefix),
                     color = color,
                     fontSize = 48.sp,
                     fontWeight = FontWeight.Bold
@@ -204,7 +206,7 @@ fun PersonDebtCard(name: String, balance: Double, onClick: () -> Unit) {
                 val statusText = if (isOwedToMe) "Owes me" else "I owe"
                 
                 Text(
-                    text = "$${String.format("%.2f", Math.abs(balance))}",
+                    text = formatCurrency(Math.abs(balance)),
                     color = color,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold
@@ -271,7 +273,7 @@ fun PersonDebtHistoryScreen(person: String, modifier: Modifier = Modifier, onBac
                 val status = if (netBalance > 0) "Owes you" else if (netBalance < 0) "You owe" else "Settled"
                 Text(text = status, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    text = "$${String.format("%.2f", Math.abs(netBalance))}",
+                    text = formatCurrency(Math.abs(netBalance)),
                     color = color,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold

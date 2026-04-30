@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.clickable
 import com.shalltear.shallnotspend.model.Account
+import com.shalltear.shallnotspend.ui.util.formatCurrency
 
 @Composable
 fun SummaryCard(
@@ -68,7 +69,7 @@ fun SummaryCard(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "$${String.format("%.2f", amount)}",
+                text = formatCurrency(amount),
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold
@@ -95,7 +96,7 @@ fun MonthEndDialog(
         title = { Text("Month Ended!", color = MaterialTheme.colorScheme.onSurface) },
         text = {
             Column {
-                Text("Your Salary account has $${String.format("%.2f", salaryBalance)} remaining from last month.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Your Salary account has ${formatCurrency(salaryBalance)} remaining from last month.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("What would you like to do with it?", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(16.dp))
@@ -103,6 +104,16 @@ fun MonthEndDialog(
                     Text(
                         "No other accounts available for transfer.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (transferTargets.size == 1) {
+                    Text("Transfer to:", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = transferTargets.first().name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Account") },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 } else {
                     Text("Transfer to:", color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,12 +16,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.DataRepository
+import com.shalltear.shallnotspend.model.Transaction
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.components.TransactionItem
 import com.shalltear.shallnotspend.ui.components.SummaryCard
 import com.shalltear.shallnotspend.ui.components.MonthEndDialog
+import com.shalltear.shallnotspend.ui.util.formatCurrency
 import java.time.LocalDateTime
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountDetailScreen(
     accountId: String,
@@ -37,6 +41,8 @@ fun AccountDetailScreen(
 
     var showMonthEndDialog by remember { mutableStateOf(false) }
     var showAccountMenu by remember { mutableStateOf(false) }
+    var transactionUnderManagement by remember { mutableStateOf<Transaction?>(null) }
+    var transactionPendingDeletion by remember { mutableStateOf<Transaction?>(null) }
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
     val transferTargets = DataRepository.accounts.filter { it.id != accountId }
@@ -47,26 +53,118 @@ fun AccountDetailScreen(
             transferTargets = transferTargets,
             onDismiss = { showMonthEndDialog = false },
             onConfirm = { action, targetAccountId ->
-                // Archive current month's transactions before clearing
-                DataRepository.archiveMonthForAccount(accountId, balance)
+                val monthEndAt = LocalDateTime.now()
+                val isTransfer = action == "TRANSFER" && targetAccountId != null
+                val transferOutTransaction = if (action == "TRANSFER" && targetAccountId != null && balance > 0.0) {
+                    Transaction(
+                        title = "Transfer to ${DataRepository.accounts.find { it.id == targetAccountId }?.name ?: "Selected Account"}",
+                        amount = balance,
+                        type = TransactionType.EXPENSE,
+                        date = monthEndAt,
+                        category = "Transfer",
+                        iconId = android.R.drawable.ic_menu_send,
+                        accountId = accountId
+                    )
+                } else {
+                    null
+                }
+
+                val nextMonthRefreshAmount = DataRepository.getMonthlyRefreshAmountForAccount(accountId)
+                val carryForwardAmount = if (isTransfer) 0.0 else balance
+
+                DataRepository.archiveMonthForAccount(
+                    accountId = accountId,
+                    closingBalance = balance,
+                    appendedTransactions = listOfNotNull(transferOutTransaction),
+                    endedAt = monthEndAt
+                )
 
                 if (action == "TRANSFER" && targetAccountId != null) {
-                    val targetAccount = DataRepository.accounts.find { it.id == targetAccountId }
                     DataRepository.addTransaction(
-                        com.shalltear.shallnotspend.model.Transaction(
+                        Transaction(
                             title = "Rollover from ${account.name}",
                             amount = balance,
                             type = TransactionType.INCOME,
-                            date = LocalDateTime.now(),
+                            date = monthEndAt,
                             category = "Transfer",
                             iconId = android.R.drawable.ic_menu_revert,
                             accountId = targetAccountId
                         )
                     )
                 }
+
+                DataRepository.addTransaction(
+                    Transaction(
+                        title = "Monthly Refresh",
+                        amount = carryForwardAmount,
+                        type = TransactionType.INCOME,
+                        date = monthEndAt,
+                        category = "Monthly Refresh",
+                        iconId = android.R.drawable.ic_menu_my_calendar,
+                        accountId = accountId
+                    )
+                )
+
+                DataRepository.addTransaction(
+                    Transaction(
+                        title = "Monthly Credit",
+                        amount = nextMonthRefreshAmount,
+                        type = TransactionType.INCOME,
+                        date = monthEndAt,
+                        category = "Monthly Credit",
+                        iconId = android.R.drawable.ic_input_add,
+                        accountId = accountId
+                    )
+                )
+
                 showMonthEndDialog = false
             }
         )
+    }
+
+    if (transactionUnderManagement != null) {
+        ModalBottomSheet(
+            onDismissRequest = { transactionUnderManagement = null },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            TransactionOptionsContent(
+                transaction = transactionUnderManagement!!,
+                onEdit = {
+                    transactionUnderManagement = transactionUnderManagement!!.copy()
+                },
+                onDelete = {
+                    transactionPendingDeletion = transactionUnderManagement
+                    transactionUnderManagement = null
+                },
+                onDismiss = { transactionUnderManagement = null }
+            )
+        }
+    }
+
+    if (transactionPendingDeletion != null) {
+        AlertDialog(
+            onDismissRequest = { transactionPendingDeletion = null },
+            title = { Text("Delete Entry") },
+            text = { Text("Delete ${transactionPendingDeletion!!.title}?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        DataRepository.deleteTransaction(transactionPendingDeletion!!.id)
+                        transactionPendingDeletion = null
+                    }
+                ) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { transactionPendingDeletion = null }) { Text("Cancel") }
+            }
+        )
+    }
+
+    val editingTransaction = transactionUnderManagement?.takeIf {
+        it.type == TransactionType.INCOME || it.type == TransactionType.EXPENSE
+    }
+
+    if (editingTransaction != null && (editingTransaction.type == TransactionType.INCOME || editingTransaction.type == TransactionType.EXPENSE) && false) {
     }
 
     Column(
@@ -145,7 +243,7 @@ fun AccountDetailScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "$${String.format("%.2f", targetBalance)}",
+                        text = formatCurrency(targetBalance),
                         color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 48.sp,
                         fontWeight = FontWeight.Bold
@@ -211,8 +309,80 @@ fun AccountDetailScreen(
                         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
                     ) + fadeIn(tween(delayMillis = 100 + (index * 50)))
                 ) {
-                    TransactionItem(transaction = transaction)
+                    TransactionItem(
+                        transaction = transaction,
+                        onLongClick = if (transaction.type == TransactionType.INCOME || transaction.type == TransactionType.EXPENSE) {
+                            { transactionUnderManagement = transaction }
+                        } else {
+                            null
+                        }
+                    )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransactionOptionsContent(
+    transaction: Transaction,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var showEditSheet by remember { mutableStateOf(false) }
+
+    if (showEditSheet) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showEditSheet = false
+                onDismiss()
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            com.shalltear.shallnotspend.AddTransactionContent(
+                accountId = transaction.accountId,
+                existingTransaction = transaction,
+                onDismiss = {
+                    showEditSheet = false
+                    onDismiss()
+                }
+            )
+        }
+    } else {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(transaction.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text("Choose an action", color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Button(
+                onClick = {
+                    onEdit()
+                    showEditSheet = true
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Text("Edit Entry")
+            }
+
+            OutlinedButton(
+                onClick = onDelete,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Delete Entry")
+            }
+
+            TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel")
             }
         }
     }

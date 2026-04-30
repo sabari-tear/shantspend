@@ -1,6 +1,8 @@
 package com.shalltear.shallnotspend.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,15 +24,24 @@ import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.Transaction
 import com.shalltear.shallnotspend.model.TransactionType
+import com.shalltear.shallnotspend.ui.util.formatSignedCurrency
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun TransactionItem(transaction: Transaction) {
+fun TransactionItem(transaction: Transaction, onLongClick: (() -> Unit)? = null) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
+            .padding(vertical = 8.dp)
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(onClick = {}, onLongClick = onLongClick)
+                } else {
+                    Modifier
+                }
+            ),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant
     ) {
@@ -42,8 +53,10 @@ fun TransactionItem(transaction: Transaction) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Icon
+                val isSecretIncome = transaction.type == TransactionType.INCOME && transaction.category == "SECRET_INCOME"
                 val iconTint = when (transaction.type) {
-                    TransactionType.INCOME, TransactionType.LEND_RETURN, TransactionType.BORROW -> MaterialTheme.colorScheme.primary
+                    TransactionType.INCOME -> if (isSecretIncome) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                    TransactionType.LEND_RETURN, TransactionType.BORROW -> MaterialTheme.colorScheme.primary
                     TransactionType.EXPENSE, TransactionType.LEND, TransactionType.BORROW_RETURN -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.onSurface
                 }
@@ -99,11 +112,15 @@ fun TransactionItem(transaction: Transaction) {
 
                 // Amount
                 val isPositive = transaction.type in listOf(TransactionType.INCOME, TransactionType.TRANSFER, TransactionType.LEND_RETURN, TransactionType.BORROW)
-                val amountColor = if (isPositive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
+                val amountColor = if (isPositive) {
+                    if (isSecretIncome) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.secondary
+                }
                 val sign = if (isPositive) "+" else "-"
 
                 Text(
-                    text = "$sign$${String.format("%.2f", transaction.amount)}",
+                    text = formatSignedCurrency(transaction.amount, sign),
                     color = amountColor,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold

@@ -8,7 +8,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.WindowInsets
@@ -37,6 +39,7 @@ import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.screens.AccountDetailScreen
 import com.shalltear.shallnotspend.ui.screens.DashboardScreen
 import com.shalltear.shallnotspend.ui.theme.ShantSpendTheme
+import com.shalltear.shallnotspend.ui.util.formatAmountInputLabel
 import java.time.LocalDateTime
 import java.util.UUID
 
@@ -393,38 +396,48 @@ fun AddDebtContent(onDismiss: () -> Unit) {
         OutlinedTextField(
             value = amount,
             onValueChange = { amount = it },
-            label = { Text("Amount ($)") },
+                label = { Text(formatAmountInputLabel()) },
             modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        ExposedDropdownMenuBox(
-            expanded = accountExpanded,
-            onExpandedChange = { accountExpanded = it },
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        if (DataRepository.accounts.size <= 1) {
             OutlinedTextField(
                 value = selectedAccount?.name ?: "",
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Account") },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
-                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                modifier = Modifier.fillMaxWidth().menuAnchor()
+                modifier = Modifier.fillMaxWidth()
             )
-            ExposedDropdownMenu(
+        } else {
+            ExposedDropdownMenuBox(
                 expanded = accountExpanded,
-                onDismissRequest = { accountExpanded = false }
+                onExpandedChange = { accountExpanded = it },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                DataRepository.accounts.forEach { account ->
-                    DropdownMenuItem(
-                        text = { Text(account.name) },
-                        onClick = {
-                            selectedAccount = account
-                            accountExpanded = false
-                        }
-                    )
+                OutlinedTextField(
+                    value = selectedAccount?.name ?: "",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Account") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = accountExpanded,
+                    onDismissRequest = { accountExpanded = false }
+                ) {
+                    DataRepository.accounts.forEach { account ->
+                        DropdownMenuItem(
+                            text = { Text(account.name) },
+                            onClick = {
+                                selectedAccount = account
+                                accountExpanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -615,7 +628,8 @@ fun AddAccountContent(existingAccount: Account? = null, onDismiss: () -> Unit) {
                                 id = newAccountId,
                                 name = name,
                                 type = selectedType,
-                                initialBalance = 0.0
+                                initialBalance = 0.0,
+                                monthlyRefreshAmount = if (selectedType == AccountType.MONTHLY_REFRESH) kotlin.math.abs(parsedInitialBalance) else 0.0
                             )
                         )
 
@@ -686,13 +700,133 @@ fun AccountOptionsContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddTransactionContent(accountId: String, onDismiss: () -> Unit) {
-    var amount by remember { mutableStateOf("") }
-    var title by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(TransactionType.EXPENSE) }
-    
+fun AddTransactionContent(accountId: String, existingTransaction: com.shalltear.shallnotspend.model.Transaction? = null, onDismiss: () -> Unit) {
+    var amount by remember(existingTransaction) { mutableStateOf(existingTransaction?.amount?.toString() ?: "") }
+    var title by remember(existingTransaction) { mutableStateOf(existingTransaction?.title ?: "") }
+    var selectedType by remember(existingTransaction) { mutableStateOf(existingTransaction?.type ?: TransactionType.EXPENSE) }
+    var showSecretTransactionDialog by remember { mutableStateOf(false) }
+    var selectedSecretTargetAccountId by remember { mutableStateOf<String?>(null) }
+    var secretAccountExpanded by remember { mutableStateOf(false) }
+    val isEditing = existingTransaction != null
+
     val accountName = DataRepository.accounts.find { it.id == accountId }?.name ?: "Account"
+    val transferableAccounts = DataRepository.accounts.filter { it.id != accountId }
+
+    fun saveTransaction(secretTargetAccountId: String? = null) {
+        val expenseAmount = amount.toDoubleOrNull() ?: 0.0
+        if (expenseAmount > 0 && title.isNotBlank()) {
+            val icon = if (selectedType == TransactionType.INCOME) android.R.drawable.ic_menu_save else android.R.drawable.ic_menu_edit
+            if (existingTransaction != null) {
+                DataRepository.updateTransaction(
+                    existingTransaction.copy(
+                        title = title,
+                        amount = expenseAmount,
+                        type = selectedType,
+                        category = selectedType.name,
+                        iconId = icon
+                    )
+                )
+            } else {
+                DataRepository.addTransaction(
+                    com.shalltear.shallnotspend.model.Transaction(
+                        title = title,
+                        amount = expenseAmount,
+                        type = selectedType,
+                        date = LocalDateTime.now(),
+                        category = selectedType.name,
+                        iconId = icon,
+                        accountId = accountId
+                    )
+                )
+
+                if (selectedType == TransactionType.EXPENSE && !secretTargetAccountId.isNullOrBlank()) {
+                    DataRepository.addTransaction(
+                        com.shalltear.shallnotspend.model.Transaction(
+                            title = title,
+                            amount = expenseAmount,
+                            type = TransactionType.INCOME,
+                            date = LocalDateTime.now(),
+                            category = "SECRET_INCOME",
+                            iconId = android.R.drawable.ic_menu_upload,
+                            accountId = secretTargetAccountId
+                        )
+                    )
+                }
+            }
+        }
+        onDismiss()
+    }
+
+    if (showSecretTransactionDialog) {
+        AlertDialog(
+            onDismissRequest = { showSecretTransactionDialog = false },
+            title = { Text("Secret Transaction") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Choose account to secretly receive this expense amount as income")
+                    if (transferableAccounts.isEmpty()) {
+                        Text("Create another account first to use this option.")
+                    } else if (transferableAccounts.size == 1) {
+                        OutlinedTextField(
+                            value = transferableAccounts.first().name,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Target account") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = secretAccountExpanded,
+                            onExpandedChange = { secretAccountExpanded = it },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            OutlinedTextField(
+                                value = transferableAccounts.find { it.id == selectedSecretTargetAccountId }?.name.orEmpty(),
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Target account") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = secretAccountExpanded) },
+                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                            )
+                            ExposedDropdownMenu(
+                                expanded = secretAccountExpanded,
+                                onDismissRequest = { secretAccountExpanded = false }
+                            ) {
+                                transferableAccounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = { Text(account.name) },
+                                        onClick = {
+                                            selectedSecretTargetAccountId = account.id
+                                            secretAccountExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSecretTransactionDialog = false
+                        saveTransaction(selectedSecretTargetAccountId)
+                    },
+                    enabled = selectedSecretTargetAccountId != null
+                ) {
+                    Text("Save Secret")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecretTransactionDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -701,7 +835,7 @@ fun AddTransactionContent(accountId: String, onDismiss: () -> Unit) {
             .padding(bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Add to $accountName", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+        Text(if (isEditing) "Edit in $accountName" else "Add to $accountName", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
         Spacer(modifier = Modifier.height(24.dp))
         
         Row(
@@ -736,36 +870,66 @@ fun AddTransactionContent(accountId: String, onDismiss: () -> Unit) {
         OutlinedTextField(
             value = amount,
             onValueChange = { amount = it },
-            label = { Text("Amount ($)") },
+            label = { Text(formatAmountInputLabel()) },
             modifier = Modifier.fillMaxWidth()
         )
         
         Spacer(modifier = Modifier.height(32.dp))
-        
-        Button(
+
+        SecretSaveButton(
+            text = if (isEditing) "Save Changes" else "Save Transaction",
+            enabled = true,
             onClick = {
-                val expenseAmount = amount.toDoubleOrNull() ?: 0.0
-                if (expenseAmount > 0 && title.isNotBlank()) {
-                    val icon = if (selectedType == TransactionType.INCOME) android.R.drawable.ic_menu_save else android.R.drawable.ic_menu_edit
-                    DataRepository.addTransaction(
-                        com.shalltear.shallnotspend.model.Transaction(
-                            title = title,
-                            amount = expenseAmount,
-                            type = selectedType,
-                            date = LocalDateTime.now(),
-                            category = selectedType.name,
-                            iconId = icon,
-                            accountId = accountId
-                        )
-                    )
-                }
-                onDismiss()
+                saveTransaction()
             },
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text("Save Transaction", color = MaterialTheme.colorScheme.onPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            onLongClick = {
+                val canOpenSecretFlow = !isEditing && selectedType == TransactionType.EXPENSE && transferableAccounts.isNotEmpty()
+                if (canOpenSecretFlow) {
+                    selectedSecretTargetAccountId = transferableAccounts.first().id
+                    secretAccountExpanded = false
+                    showSecretTransactionDialog = true
+                }
+            }
+        )
+
+        if (!isEditing && selectedType == TransactionType.EXPENSE && transferableAccounts.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = "Tip: Long press Save Transaction for Secret Transaction",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SecretSaveButton(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .combinedClickable(
+                enabled = enabled,
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = text,
+                color = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
         }
     }
 }

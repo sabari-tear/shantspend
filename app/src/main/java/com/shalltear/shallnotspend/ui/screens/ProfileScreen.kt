@@ -45,16 +45,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.AppPreferences
+import com.shalltear.shallnotspend.model.CurrencyType
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.MonthArchive
 import com.shalltear.shallnotspend.model.ThemePalette
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.components.TransactionItem
+import com.shalltear.shallnotspend.ui.util.formatCurrency
+import com.shalltear.shallnotspend.ui.util.formatSignedCurrency
 
 private enum class ProfilePage {
     HOME,
     SETTINGS,
     THEME,
+    CURRENCY,
     HISTORY
 }
 
@@ -243,6 +247,14 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                     subtitle = "Change app color palette",
                     onClick = { page = ProfilePage.THEME }
                 )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                SettingsOptionCard(
+                    title = "Currency",
+                    subtitle = "Choose currency type",
+                    onClick = { page = ProfilePage.CURRENCY }
+                )
             }
         }
 
@@ -307,6 +319,63 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                 modifier = modifier,
                 onBack = { page = ProfilePage.HOME }
             )
+        }
+
+        ProfilePage.CURRENCY -> {
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 24.dp)
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { page = ProfilePage.SETTINGS }) {
+                        Icon(
+                            painter = painterResource(android.R.drawable.ic_menu_revert),
+                            contentDescription = "Back"
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Currency", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            text = "Pick your currency",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        CurrencyType.entries.forEach { currency ->
+                            FilterChip(
+                                selected = AppPreferences.selectedCurrency == currency,
+                                onClick = { AppPreferences.setCurrency(currency) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = {
+                                    Text(
+                                        text = when (currency) {
+                                            CurrencyType.USD -> "$"
+                                            CurrencyType.EUR -> "€"
+                                            CurrencyType.GBP -> "£"
+                                            CurrencyType.INR -> "₹"
+                                        },
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -516,13 +585,13 @@ fun MonthArchiveCard(archive: MonthArchive) {
                 ) {
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            text = "+$${String.format("%.2f", income)}",
+                            text = formatSignedCurrency(income, "+"),
                             color = MaterialTheme.colorScheme.primary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
                         )
                         Text(
-                            text = "-$${String.format("%.2f", expense)}",
+                            text = formatSignedCurrency(expense, "-"),
                             color = MaterialTheme.colorScheme.secondary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium
@@ -553,7 +622,7 @@ fun MonthArchiveCard(archive: MonthArchive) {
                     fontSize = 13.sp
                 )
                 Text(
-                    text = "$${String.format("%.2f", archive.closingBalance)}",
+                    text = formatCurrency(archive.closingBalance),
                     color = MaterialTheme.colorScheme.onBackground,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
