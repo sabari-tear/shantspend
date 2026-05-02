@@ -160,13 +160,6 @@ fun AccountDetailScreen(
         )
     }
 
-    val editingTransaction = transactionUnderManagement?.takeIf {
-        it.type == TransactionType.INCOME || it.type == TransactionType.EXPENSE
-    }
-
-    if (editingTransaction != null && (editingTransaction.type == TransactionType.INCOME || editingTransaction.type == TransactionType.EXPENSE) && false) {
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -301,6 +294,21 @@ fun AccountDetailScreen(
                 .padding(horizontal = 24.dp),
             contentPadding = PaddingValues(bottom = 80.dp)
         ) {
+            if (transactions.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 56.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("No transactions yet", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Tap + to add one", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
+                        }
+                    }
+                }
+            }
             itemsIndexed(transactions.reversed()) { index, transaction ->
                 AnimatedVisibility(
                     visible = isVisible,

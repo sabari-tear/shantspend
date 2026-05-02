@@ -15,9 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shalltear.shallnotspend.model.Account
+import com.shalltear.shallnotspend.model.AppPreferences
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.util.formatCurrency
@@ -30,7 +34,21 @@ fun DashboardScreen(
     onAccountLongClick: (Account) -> Unit
 ) {
     val accounts = DataRepository.accounts
-    val totalWealth = accounts.sumOf { DataRepository.getBalanceForAccount(it.id) }
+    val totalWealth = accounts.filter { !it.excludeFromWealth }.sumOf { DataRepository.getBalanceForAccount(it.id) }
+
+    val allTxs = DataRepository.transactions
+    val groupedByPerson = allTxs.filter {
+        it.type in listOf(TransactionType.LEND, TransactionType.BORROW, TransactionType.LEND_RETURN, TransactionType.BORROW_RETURN) && it.person.isNotBlank()
+    }.groupBy { it.person }
+    val personBalances = groupedByPerson.mapValues { (_, txs) ->
+        val owesMe = txs.filter { it.type == TransactionType.LEND }.sumOf { it.amount } - txs.filter { it.type == TransactionType.LEND_RETURN }.sumOf { it.amount }
+        val iOwe = txs.filter { it.type == TransactionType.BORROW }.sumOf { it.amount } - txs.filter { it.type == TransactionType.BORROW_RETURN }.sumOf { it.amount }
+        owesMe - iOwe
+    }
+    val netDebt = personBalances
+        .filterKeys { it !in AppPreferences.excludedDebtPeople }
+        .values
+        .sum()
 
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
@@ -55,12 +73,29 @@ fun DashboardScreen(
                     fontSize = 16.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = formatCurrency(totalWealth),
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Column(
+                    modifier = Modifier.width(IntrinsicSize.Max),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = formatCurrency(totalWealth),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontSize = 48.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (netDebt != 0.0) {
+                        val debtColor = if (netDebt > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
+                        val debtSign = if (netDebt > 0) "+" else "-"
+                        Text(
+                            text = "$debtSign${formatCurrency(Math.abs(netDebt))}",
+                            modifier = Modifier.fillMaxWidth(),
+                            textAlign = TextAlign.End,
+                            color = debtColor,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
         }
 
@@ -75,29 +110,43 @@ fun DashboardScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Accounts List
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(accounts) { account ->
-                AnimatedVisibility(
-                    visible = isVisible,
-                    enter = slideInVertically(
-                        initialOffsetY = { 50 },
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
-                    ) + fadeIn()
-                ) {
-                    AccountCard(
-                        account = account,
-                        balance = DataRepository.getBalanceForAccount(account.id),
-                        onClick = { onAccountClick(account.id) },
-                        onLongClick = { onAccountLongClick(account) }
-                    )
+        if (accounts.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 48.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("No accounts yet", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Tap + to add your first account", color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f), fontSize = 14.sp)
                 }
             }
-        }
+        } else {
+            // Accounts List
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(accounts) { account ->
+                    AnimatedVisibility(
+                        visible = isVisible,
+                        enter = slideInVertically(
+                            initialOffsetY = { 50 },
+                            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow)
+                        ) + fadeIn()
+                    ) {
+                        AccountCard(
+                            account = account,
+                            balance = DataRepository.getBalanceForAccount(account.id),
+                            onClick = { onAccountClick(account.id) },
+                            onLongClick = { onAccountLongClick(account) }
+                        )
+                    }
+                }
+            }
+        } // end else
     }
 }
 
@@ -120,9 +169,10 @@ fun AccountCard(account: Account, balance: Double, onClick: () -> Unit, onLongCl
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
-            ),
+            )
+            .semantics { contentDescription = "${account.name} account, balance ${formatCurrency(balance)}" },
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+        color = if (account.excludeFromWealth) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.surfaceVariant
     ) {
         Row(
             modifier = Modifier
@@ -154,10 +204,17 @@ fun AccountCard(account: Account, balance: Double, onClick: () -> Unit, onLongCl
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = account.type.name.replace("_", " "),
+                        text = account.type.name.replace("_", " ").lowercase().replaceFirstChar { it.uppercase() },
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp
                     )
+                    if (account.excludeFromWealth) {
+                        Text(
+                            text = "Excluded from total",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
             

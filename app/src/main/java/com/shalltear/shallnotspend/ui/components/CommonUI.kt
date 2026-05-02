@@ -130,7 +130,7 @@ fun MonthEndDialog(
                             label = { Text("Account") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = dropdownExpanded) },
                             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                            modifier = Modifier.fillMaxWidth().menuAnchor()
+                            modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                         )
                         ExposedDropdownMenu(
                             expanded = dropdownExpanded,

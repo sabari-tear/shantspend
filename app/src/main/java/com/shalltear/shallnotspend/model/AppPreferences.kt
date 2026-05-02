@@ -26,6 +26,7 @@ object AppPreferences {
     private const val KEY_PROFILE_EMAIL_LEGACY = "profile_email"
     private const val KEY_THEME = "theme"
     private const val KEY_CURRENCY = "currency"
+    private const val KEY_EXCLUDED_DEBT_PEOPLE = "excluded_debt_people"
 
     private lateinit var prefs: SharedPreferences
 
@@ -41,6 +42,9 @@ object AppPreferences {
     var selectedCurrency by mutableStateOf(CurrencyType.USD)
         private set
 
+    var excludedDebtPeople by mutableStateOf(setOf<String>())
+        private set
+
     fun init(context: Context) {
         prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         profileName = prefs.getString(KEY_PROFILE_NAME, "Your Name") ?: "Your Name"
@@ -54,6 +58,8 @@ object AppPreferences {
 
         val currencyName = prefs.getString(KEY_CURRENCY, CurrencyType.USD.name) ?: CurrencyType.USD.name
         selectedCurrency = CurrencyType.entries.find { it.name == currencyName } ?: CurrencyType.USD
+
+        excludedDebtPeople = prefs.getStringSet(KEY_EXCLUDED_DEBT_PEOPLE, emptySet())?.toSet() ?: emptySet()
     }
 
     fun updateProfile(name: String, bio: String) {
@@ -73,5 +79,21 @@ object AppPreferences {
     fun setCurrency(currencyType: CurrencyType) {
         selectedCurrency = currencyType
         prefs.edit().putString(KEY_CURRENCY, currencyType.name).apply()
+    }
+
+    fun toggleDebtPersonExclusion(person: String) {
+        val updated = excludedDebtPeople.toMutableSet()
+        if (updated.contains(person)) {
+            updated.remove(person)
+        } else {
+            updated.add(person)
+        }
+        excludedDebtPeople = updated.toSet()
+        prefs.edit().putStringSet(KEY_EXCLUDED_DEBT_PEOPLE, excludedDebtPeople).apply()
+    }
+
+    fun clearFinancialPreferences() {
+        excludedDebtPeople = emptySet()
+        prefs.edit().remove(KEY_EXCLUDED_DEBT_PEOPLE).apply()
     }
 }

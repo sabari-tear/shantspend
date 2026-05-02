@@ -70,7 +70,16 @@ fun TransactionItem(transaction: Transaction, onLongClick: (() -> Unit)? = null)
                 ) {
                     Icon(
                         painter = painterResource(id = transaction.iconId),
-                        contentDescription = transaction.category,
+                        contentDescription = when (transaction.type) {
+                            TransactionType.INCOME -> if (isSecretIncome) "Secret income" else "Income"
+                            TransactionType.EXPENSE -> "Expense"
+                            TransactionType.LEND -> "Lent money"
+                            TransactionType.BORROW -> "Borrowed money"
+                            TransactionType.LEND_RETURN -> "Lend returned"
+                            TransactionType.BORROW_RETURN -> "Borrow paid back"
+                            TransactionType.TRANSFER -> "Transfer"
+                            else -> "Transaction"
+                        },
                         tint = iconTint,
                         modifier = Modifier.size(24.dp)
                     )
@@ -132,10 +141,9 @@ fun TransactionItem(transaction: Transaction, onLongClick: (() -> Unit)? = null)
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        // Mark as returned
-                        transaction.isReturned = true
-                        DataRepository.updateTransaction(transaction)
-                        
+                        // Mark original as returned via immutable copy
+                        DataRepository.updateTransaction(transaction.copy(isReturned = true))
+
                         // Create return transaction
                         val returnType = if (transaction.type == TransactionType.LEND) TransactionType.LEND_RETURN else TransactionType.BORROW_RETURN
                         val returnIcon = if (transaction.type == TransactionType.LEND) android.R.drawable.ic_menu_revert else android.R.drawable.ic_menu_send

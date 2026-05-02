@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -19,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.shalltear.shallnotspend.model.AppPreferences
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.util.formatCurrency
@@ -70,9 +72,49 @@ fun DebtDashboard(modifier: Modifier = Modifier, onPersonClick: (String) -> Unit
         owesMe - iOweThem
     }
 
-    val totalOwedToMe = personBalances.values.filter { it > 0 }.sum()
-    val totalIOwe = Math.abs(personBalances.values.filter { it < 0 }.sum())
+    val excludedPeople = AppPreferences.excludedDebtPeople
+    val includedPersonBalances = personBalances.filterKeys { it !in excludedPeople }
+
+    val totalOwedToMe = includedPersonBalances.values.filter { it > 0 }.sum()
+    val totalIOwe = Math.abs(includedPersonBalances.values.filter { it < 0 }.sum())
     val netBalance = totalOwedToMe - totalIOwe
+
+    var personUnderManagement by remember { mutableStateOf<String?>(null) }
+
+    if (personUnderManagement != null) {
+        AlertDialog(
+            onDismissRequest = { personUnderManagement = null },
+            title = { Text(personUnderManagement!!) },
+            text = {
+                Text(
+                    if (AppPreferences.excludedDebtPeople.contains(personUnderManagement!!)) {
+                        "This debt is excluded from total debt."
+                    } else {
+                        "This debt is included in total debt."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        AppPreferences.toggleDebtPersonExclusion(personUnderManagement!!)
+                        personUnderManagement = null
+                    }
+                ) {
+                    Text(
+                        if (AppPreferences.excludedDebtPeople.contains(personUnderManagement!!)) {
+                            "Include in Total Debt"
+                        } else {
+                            "Exclude from Total Debt"
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { personUnderManagement = null }) { Text("Cancel") }
+            }
+        )
+    }
 
     var isVisible by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { isVisible = true }
@@ -155,7 +197,13 @@ fun DebtDashboard(modifier: Modifier = Modifier, onPersonClick: (String) -> Unit
             ) {
                 items(personBalances.entries.toList()) { (person, balance) ->
                     if (Math.abs(balance) > 0.01) { // Only show active debts
-                        PersonDebtCard(name = person, balance = balance, onClick = { onPersonClick(person) })
+                        PersonDebtCard(
+                            name = person,
+                            balance = balance,
+                            isExcluded = excludedPeople.contains(person),
+                            onClick = { onPersonClick(person) },
+                            onLongClick = { personUnderManagement = person }
+                        )
                     }
                 }
             }
@@ -163,12 +211,16 @@ fun DebtDashboard(modifier: Modifier = Modifier, onPersonClick: (String) -> Unit
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun PersonDebtCard(name: String, balance: Double, onClick: () -> Unit) {
+fun PersonDebtCard(name: String, balance: Double, isExcluded: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
     Surface(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+        color = if (isExcluded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f) else MaterialTheme.colorScheme.surfaceVariant
     ) {
         Row(
             modifier = Modifier
@@ -216,6 +268,13 @@ fun PersonDebtCard(name: String, balance: Double, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp
                 )
+                if (isExcluded) {
+                    Text(
+                        text = "Excluded",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        fontSize = 11.sp
+                    )
+                }
             }
         }
     }

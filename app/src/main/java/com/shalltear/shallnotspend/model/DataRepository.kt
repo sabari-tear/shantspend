@@ -16,6 +16,9 @@ import java.lang.reflect.Type
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.util.UUID
+
+const val BACKUP_SCHEMA_VERSION = 1
 
 class LocalDateTimeAdapter : JsonSerializer<LocalDateTime>, JsonDeserializer<LocalDateTime> {
     override fun serialize(src: LocalDateTime, typeOfSrc: Type, context: JsonSerializationContext): JsonElement {
@@ -204,6 +207,14 @@ object DataRepository {
         saveAccounts()
     }
 
+    fun toggleExcludeFromWealth(accountId: String) {
+        val index = accounts.indexOfFirst { it.id == accountId }
+        if (index != -1) {
+            accounts[index] = accounts[index].copy(excludeFromWealth = !accounts[index].excludeFromWealth)
+            saveAccounts()
+        }
+    }
+
     fun updateAccount(account: Account) {
         val index = accounts.indexOfFirst { it.id == account.id }
         if (index != -1) {
@@ -239,6 +250,108 @@ object DataRepository {
         saveTransactions()
     }
 
+    fun clearAllData() {
+        accounts.clear()
+        transactions.clear()
+        monthArchives.clear()
+        saveAccounts()
+        saveTransactions()
+        saveArchives()
+    }
+
+    /** Returns a JSON snapshot of current data that can be passed back to restoreFromSnapshot(). */
+    fun snapshotForUndo(): String = exportToJson()
+
+    /** Restores data from a previously taken snapshot JSON (used by undo). */
+    fun restoreFromSnapshot(snapshotJson: String) {
+        accounts.clear()
+        transactions.clear()
+        monthArchives.clear()
+        saveAccounts(); saveTransactions(); saveArchives()
+        importFromJson(snapshotJson)
+    }
+
+    fun exportToJson(): String {
+        val backup = AppBackup(
+            schemaVersion = BACKUP_SCHEMA_VERSION,
+            exportedAt = LocalDateTime.now(),
+            accounts = accounts.toList(),
+            transactions = transactions.toList(),
+            archives = monthArchives.toList()
+        )
+        return gson.toJson(backup)
+    }
+
+    /** Returns a preview of what would change if [jsonString] were imported. Throws on parse error. */
+    fun previewImport(jsonString: String): ImportPreview {
+        val backup: AppBackup = gson.fromJson(jsonString, AppBackup::class.java)
+        val newAccounts = backup.accounts.filter { imp ->
+            accounts.none { it.name.equals(imp.name, ignoreCase = true) }
+        }
+        val reusedAccounts = backup.accounts.filter { imp ->
+            accounts.any { it.name.equals(imp.name, ignoreCase = true) }
+        }
+        val existingTxIds = transactions.map { it.id }.toSet()
+        val existingFingerprints = transactions.map { it.fingerprint() }.toSet()
+        val newTxCount = backup.transactions.count { tx ->
+            tx.id !in existingTxIds && tx.fingerprint() !in existingFingerprints
+        }
+        val skippedTxCount = backup.transactions.size - newTxCount
+        val newArchiveCount = backup.archives.count { arc -> monthArchives.none { it.id == arc.id } }
+        return ImportPreview(
+            newAccountNames = newAccounts.map { it.name },
+            reusedAccountNames = reusedAccounts.map { it.name },
+            newTransactionCount = newTxCount,
+            skippedTransactionCount = skippedTxCount,
+            newArchiveCount = newArchiveCount,
+            exportedAt = backup.exportedAt,
+            schemaVersion = backup.schemaVersion ?: 0
+        )
+    }
+
+    fun importFromJson(jsonString: String) {
+        val backup: AppBackup = gson.fromJson(jsonString, AppBackup::class.java)
+        val accountIdMap = mutableMapOf<String, String>()
+
+        backup.accounts.forEach { importedAccount ->
+            val existing = accounts.find { it.name.equals(importedAccount.name, ignoreCase = true) }
+            if (existing != null) {
+                accountIdMap[importedAccount.id] = existing.id
+            } else {
+                val newId = UUID.randomUUID().toString()
+                accountIdMap[importedAccount.id] = newId
+                accounts.add(importedAccount.copy(id = newId))
+            }
+        }
+
+        val existingTxIds = transactions.map { it.id }.toSet()
+        val existingFingerprints = transactions.map { it.fingerprint() }.toSet()
+
+        backup.transactions.forEach { tx ->
+            if (tx.id in existingTxIds) return@forEach
+            val remappedAccountId = accountIdMap[tx.accountId] ?: tx.accountId
+            val remapped = tx.copy(accountId = remappedAccountId)
+            if (remapped.fingerprint() in existingFingerprints) return@forEach
+            transactions.add(remapped)
+        }
+
+        backup.archives.forEach { archive ->
+            if (monthArchives.any { it.id == archive.id }) return@forEach
+            val remappedAccountId = accountIdMap[archive.accountId] ?: archive.accountId
+            val remappedTxs = archive.transactions.map { tx ->
+                tx.copy(accountId = accountIdMap[tx.accountId] ?: tx.accountId)
+            }
+            monthArchives.add(archive.copy(
+                accountId = remappedAccountId,
+                transactions = remappedTxs
+            ))
+        }
+
+        saveAccounts()
+        saveTransactions()
+        saveArchives()
+    }
+
     fun getBalanceForAccount(accountId: String): Double {
         val account = accounts.find { it.id == accountId } ?: return 0.0
         val txs = transactions.filter { it.accountId == accountId }
@@ -247,3 +360,25 @@ object DataRepository {
         return account.initialBalance + income - expense
     }
 }
+
+data class AppBackup(
+    val schemaVersion: Int? = BACKUP_SCHEMA_VERSION,
+    val exportedAt: LocalDateTime? = null,
+    val accounts: List<Account>,
+    val transactions: List<Transaction>,
+    val archives: List<MonthArchive>
+)
+
+data class ImportPreview(
+    val newAccountNames: List<String>,
+    val reusedAccountNames: List<String>,
+    val newTransactionCount: Int,
+    val skippedTransactionCount: Int,
+    val newArchiveCount: Int,
+    val exportedAt: LocalDateTime?,
+    val schemaVersion: Int
+)
+
+/** Content-based fingerprint for duplicate detection across devices / edited backups. */
+fun Transaction.fingerprint(): String =
+    "$accountId|${type.name}|$amount|${date}|${title.trim().lowercase()}|${person.trim().lowercase()}"

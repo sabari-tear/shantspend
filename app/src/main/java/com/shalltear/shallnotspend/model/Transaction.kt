@@ -12,7 +12,8 @@ data class Account(
     val name: String,
     val type: AccountType,
     val initialBalance: Double = 0.0,
-    val monthlyRefreshAmount: Double = 0.0
+    val monthlyRefreshAmount: Double = 0.0,
+    val excludeFromWealth: Boolean = false
 )
 
 enum class TransactionType {
@@ -28,7 +29,7 @@ data class Transaction(
     val category: String,
     val iconId: Int,
     val accountId: String,
-    var isReturned: Boolean = false,
+    val isReturned: Boolean = false,
     val person: String = ""
 )
 

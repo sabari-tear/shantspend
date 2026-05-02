@@ -28,6 +28,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -310,12 +312,10 @@ fun AddDebtContent(onDismiss: () -> Unit) {
     var personExpanded by remember { mutableStateOf(false) }
     var accountExpanded by remember { mutableStateOf(false) }
 
-    val existingPeople = remember {
-        DataRepository.transactions
-            .map { it.person }
-            .filter { it.isNotBlank() }
-            .distinct()
-    }
+    val existingPeople = DataRepository.transactions
+        .map { it.person }
+        .filter { it.isNotBlank() }
+        .distinct()
     
     val filteredPeople = existingPeople.filter { it.contains(personName, ignoreCase = true) }
 
@@ -360,7 +360,7 @@ fun AddDebtContent(onDismiss: () -> Unit) {
                     personExpanded = true
                 },
                 label = { Text(if (isLend) "Who did you lend to?" else "Who did you borrow from?") },
-                modifier = Modifier.fillMaxWidth().menuAnchor(),
+                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
                 singleLine = true
             )
 
@@ -395,8 +395,16 @@ fun AddDebtContent(onDismiss: () -> Unit) {
         
         OutlinedTextField(
             value = amount,
-            onValueChange = { amount = it },
-                label = { Text(formatAmountInputLabel()) },
+            onValueChange = { v ->
+                val filtered = v.filter { it.isDigit() || it == '.' }.let { s ->
+                    val dot = s.indexOf('.')
+                    if (dot >= 0) s.take(dot + 1) + s.drop(dot + 1).filter { it.isDigit() }.take(2)
+                    else s
+                }
+                amount = filtered
+            },
+            label = { Text(formatAmountInputLabel()) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -423,7 +431,7 @@ fun AddDebtContent(onDismiss: () -> Unit) {
                     label = { Text("Account") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = accountExpanded) },
                     colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                    modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 )
                 ExposedDropdownMenu(
                     expanded = accountExpanded,
@@ -465,6 +473,7 @@ fun AddDebtContent(onDismiss: () -> Unit) {
                 }
                 onDismiss()
             },
+            enabled = (amount.toDoubleOrNull() ?: 0.0) > 0 && personName.isNotBlank() && selectedAccount != null,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -510,8 +519,16 @@ fun AddAccountContent(existingAccount: Account? = null, onDismiss: () -> Unit) {
         if (!isEditing) {
             OutlinedTextField(
                 value = initialBalance,
-                onValueChange = { initialBalance = it },
+                onValueChange = { v ->
+                    val filtered = v.filter { it.isDigit() || it == '.' || it == '-' }.let { s ->
+                        val dot = s.indexOf('.')
+                        if (dot >= 0) s.take(dot + 1) + s.drop(dot + 1).filter { it.isDigit() }.take(2)
+                        else s
+                    }
+                    initialBalance = filtered
+                },
                 label = { Text(balanceLabel) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -686,6 +703,17 @@ fun AccountOptionsContent(
         }
 
         OutlinedButton(
+            onClick = {
+                DataRepository.toggleExcludeFromWealth(account.id)
+                onDismiss()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Text(if (account.excludeFromWealth) "Include in Total Wealth" else "Exclude from Total Wealth")
+        }
+
+        OutlinedButton(
             onClick = onDelete,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -789,7 +817,7 @@ fun AddTransactionContent(accountId: String, existingTransaction: com.shalltear.
                                 label = { Text("Target account") },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = secretAccountExpanded) },
                                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-                                modifier = Modifier.fillMaxWidth().menuAnchor()
+                                modifier = Modifier.fillMaxWidth().menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             )
                             ExposedDropdownMenu(
                                 expanded = secretAccountExpanded,
@@ -869,8 +897,16 @@ fun AddTransactionContent(accountId: String, existingTransaction: com.shalltear.
         
         OutlinedTextField(
             value = amount,
-            onValueChange = { amount = it },
+            onValueChange = { v ->
+                val filtered = v.filter { it.isDigit() || it == '.' }.let { s ->
+                    val dot = s.indexOf('.')
+                    if (dot >= 0) s.take(dot + 1) + s.drop(dot + 1).filter { it.isDigit() }.take(2)
+                    else s
+                }
+                amount = filtered
+            },
             label = { Text(formatAmountInputLabel()) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth()
         )
         
