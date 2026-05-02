@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -37,6 +38,7 @@ import com.shalltear.shallnotspend.model.Account
 import com.shalltear.shallnotspend.model.AccountType
 import com.shalltear.shallnotspend.model.AppPreferences
 import com.shalltear.shallnotspend.model.DataRepository
+import com.shalltear.shallnotspend.model.ThemeMode
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.screens.AccountDetailScreen
 import com.shalltear.shallnotspend.ui.screens.DashboardScreen
@@ -52,7 +54,14 @@ class MainActivity : ComponentActivity() {
         AppPreferences.init(this)
         enableEdgeToEdge()
         setContent {
+            val systemDark = isSystemInDarkTheme()
+            val darkTheme = when (AppPreferences.selectedThemeMode) {
+                ThemeMode.SYSTEM -> systemDark
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
             ShantSpendTheme(
+                darkTheme = darkTheme,
                 dynamicColor = false,
                 palette = AppPreferences.selectedTheme
             ) {

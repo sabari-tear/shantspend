@@ -59,6 +59,7 @@ import com.shalltear.shallnotspend.model.CurrencyType
 import com.shalltear.shallnotspend.model.DataRepository
 import com.shalltear.shallnotspend.model.ImportPreview
 import com.shalltear.shallnotspend.model.MonthArchive
+import com.shalltear.shallnotspend.model.ThemeMode
 import com.shalltear.shallnotspend.model.ThemePalette
 import com.shalltear.shallnotspend.model.TransactionType
 import com.shalltear.shallnotspend.ui.components.TransactionItem
@@ -402,6 +403,20 @@ fun ProfileScreen(modifier: Modifier = Modifier) {
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
+                            text = "Appearance",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        ThemeModeSelectionCard(
+                            selectedMode = AppPreferences.selectedThemeMode,
+                            onSelect = { AppPreferences.setThemeMode(it) }
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
                             text = "Pick your palette",
                             color = MaterialTheme.colorScheme.onSurface,
                             fontSize = 16.sp,
@@ -682,6 +697,44 @@ private fun DataManagementPage(modifier: Modifier = Modifier, onBack: () -> Unit
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeSelectionCard(
+    selectedMode: ThemeMode,
+    onSelect: (ThemeMode) -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            listOf(
+                ThemeMode.SYSTEM to "System",
+                ThemeMode.LIGHT to "Light",
+                ThemeMode.DARK to "Dark"
+            ).forEach { (mode, label) ->
+                val selected = selectedMode == mode
+                Button(
+                    onClick = { onSelect(mode) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                    )
+                ) {
+                    Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }

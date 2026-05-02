@@ -12,6 +12,12 @@ enum class ThemePalette {
     OCEAN_BLUE
 }
 
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK
+}
+
 enum class CurrencyType {
     USD,
     EUR,
@@ -25,6 +31,7 @@ object AppPreferences {
     private const val KEY_PROFILE_BIO = "profile_bio"
     private const val KEY_PROFILE_EMAIL_LEGACY = "profile_email"
     private const val KEY_THEME = "theme"
+    private const val KEY_THEME_MODE = "theme_mode"
     private const val KEY_CURRENCY = "currency"
     private const val KEY_EXCLUDED_DEBT_PEOPLE = "excluded_debt_people"
 
@@ -37,6 +44,9 @@ object AppPreferences {
         private set
 
     var selectedTheme by mutableStateOf(ThemePalette.NEON_MINT)
+        private set
+
+    var selectedThemeMode by mutableStateOf(ThemeMode.SYSTEM)
         private set
 
     var selectedCurrency by mutableStateOf(CurrencyType.USD)
@@ -56,6 +66,9 @@ object AppPreferences {
         val themeName = prefs.getString(KEY_THEME, ThemePalette.NEON_MINT.name) ?: ThemePalette.NEON_MINT.name
         selectedTheme = ThemePalette.entries.find { it.name == themeName } ?: ThemePalette.NEON_MINT
 
+        val themeModeName = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
+        selectedThemeMode = ThemeMode.entries.find { it.name == themeModeName } ?: ThemeMode.SYSTEM
+
         val currencyName = prefs.getString(KEY_CURRENCY, CurrencyType.USD.name) ?: CurrencyType.USD.name
         selectedCurrency = CurrencyType.entries.find { it.name == currencyName } ?: CurrencyType.USD
 
@@ -74,6 +87,11 @@ object AppPreferences {
     fun setTheme(themePalette: ThemePalette) {
         selectedTheme = themePalette
         prefs.edit().putString(KEY_THEME, themePalette.name).apply()
+    }
+
+    fun setThemeMode(themeMode: ThemeMode) {
+        selectedThemeMode = themeMode
+        prefs.edit().putString(KEY_THEME_MODE, themeMode.name).apply()
     }
 
     fun setCurrency(currencyType: CurrencyType) {
