@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -51,10 +53,25 @@ jobs:
         if: always()
         run: rm -f release.jks
 
+      - name: Generate changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          {
+            if [ -n "$PREV_TAG" ]; then
+              echo "## Commits since $PREV_TAG"
+              git log "$PREV_TAG"..HEAD --pretty=format:"- %s (%h)"
+            else
+              echo "## Commits"
+              git log --pretty=format:"- %s (%h)"
+            fi
+            echo ""
+          } > changelog.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.versionName }}-build${{ github.run_number }}
           name: v${{ steps.version.outputs.versionName }}-build${{ github.run_number }}
           files: app/build/outputs/apk/release/app-release.apk
+          body_path: changelog.md
           generate_release_notes: true
