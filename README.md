@@ -42,20 +42,26 @@ keytool -genkeypair -v \
 
 Keep the resulting `.jks` file outside the repo and back it up privately — losing it means the app can never be updated under the same signature again.
 
-Base64-encode it and store it as GitHub Actions secrets:
+Base64-encode it and set it as a GitHub Actions secret **directly from memory** (PowerShell), rather than round-tripping through a text file — writing the base64 blob to a file and piping it back in (`Out-File` / `< file`) is what corrupted the secret last time (stray newline/encoding change broke the keystore):
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("<path-to-jks>")) | Out-File -Encoding ascii keystore_b64.txt
-```
-
-```bash
-gh secret set KEYSTORE_BASE64 < keystore_b64.txt
+$b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes("<path-to-jks>"))
+gh secret set KEYSTORE_BASE64 --body $b64
 gh secret set KEYSTORE_PASSWORD --body "<storepass>"
 gh secret set KEY_ALIAS --body "shantspend-upload"
 gh secret set KEY_PASSWORD --body "<keypass>"
 ```
 
-Delete the local `keystore_b64.txt` afterward.
+On macOS/Linux, the equivalent is:
+
+```bash
+gh secret set KEYSTORE_BASE64 --body "$(base64 -w0 shantspend-release.jks)"
+gh secret set KEYSTORE_PASSWORD --body "<storepass>"
+gh secret set KEY_ALIAS --body "shantspend-upload"
+gh secret set KEY_PASSWORD --body "<keypass>"
+```
+
+The release workflow validates the decoded keystore with `keytool -list` before attempting to build, so a corrupted secret now fails fast with a clear error instead of the cryptic `packageRelease FAILED` / `Tag number over 30 is not supported` error.
 
 ## CI/CD
 

@@ -26,7 +26,12 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.jks
+        run: printf '%s' "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.jks
+
+      - name: Validate keystore
+        run: |
+          keytool -list -storepass "${{ secrets.KEYSTORE_PASSWORD }}" -keystore release.jks \
+            || { echo "::error::release.jks is not a valid keystore - the KEYSTORE_BASE64 secret is likely corrupted. Regenerate it and re-run 'gh secret set KEYSTORE_BASE64 --body \$b64' (see README)."; exit 1; }
 
       - name: Read versionName
         id: version
